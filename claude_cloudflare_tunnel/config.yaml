@@ -1,0 +1,20 @@
+name: Cloudflare Tunnel (Claude Gateway)
+version: "1.0.0"
+slug: claude_cloudflare_tunnel
+description: >-
+  Cloudflared-tunnel die de Claude Remote MCP Gateway (poort 8300) veilig
+  via HTTPS publiek bereikbaar maakt, zodat Claude er via web, mobiel en
+  desktop bij kan zonder open poorten op je router.
+url: "https://github.com/Jelle0721/claude-remote-mcp"
+arch:
+  - aarch64
+  - amd64
+  - armv7
+init: false
+startup: services
+boot: auto
+host_network: true
+options:
+  tunnel_token: ""
+schema:
+  tunnel_token: password
