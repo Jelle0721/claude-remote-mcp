@@ -1,0 +1,7 @@
+mcp==2.1.1
+mcp-types==2.1.1
+starlette==1.6.0
+uvicorn[standard]==0.52.4
+httpx==0.28.1
+pydantic==2.13.4
+garminconnect==0.3.11
