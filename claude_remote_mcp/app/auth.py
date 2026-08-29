@@ -1,7 +1,16 @@
-"""Simpele bearer-token authenticatie voor alle gemounte MCP-endpoints.
+"""Simpele token-authenticatie voor alle gemounte MCP-endpoints.
 
 /health blijft publiek (geen geheime data, handig voor monitoring/uptime-checks).
-Alles daarbuiten vereist: Authorization: Bearer <GATEWAY_TOKEN>
+
+Alles daarbuiten accepteert het token op twee manieren:
+  1. Header: Authorization: Bearer <GATEWAY_TOKEN>
+  2. Query-param: ?token=<GATEWAY_TOKEN>  (nodig omdat Claude's custom-connector
+     UI geen los headerveld biedt - je geeft alleen een URL op)
+
+We geven bij een ontbrekend/fout token bewust een 403 terug, geen 401: een 401
+op een MCP-endpoint laat Claude's client automatisch een OAuth-inlogflow
+proberen te starten (die wij niet hebben geimplementeerd), wat verwarrende
+"kon niet inloggen"-meldingen oplevert. Een 403 triggert dat gedrag niet.
 """
 
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -25,7 +34,9 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
             )
 
         auth_header = request.headers.get("authorization", "")
-        if auth_header != f"Bearer {GATEWAY_TOKEN}":
-            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+        query_token = request.query_params.get("token", "")
 
-        return await call_next(request)
+        if auth_header == f"Bearer {GATEWAY_TOKEN}" or query_token == GATEWAY_TOKEN:
+            return await call_next(request)
+
+        return JSONResponse({"error": "Forbidden"}, status_code=403)
