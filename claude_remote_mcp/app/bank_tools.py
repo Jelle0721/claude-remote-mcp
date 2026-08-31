@@ -262,6 +262,35 @@ async def bank_get_transactions(params: TransactionsInput) -> str:
         return _error(e)
 
 
+@bank_mcp.tool(
+    name="bank_debug_key",
+    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False),
+)
+async def bank_debug_key() -> str:
+    """Veilige diagnose van de geconfigureerde private key - controleert lengte
+    en structuur ZONDER de sleutel zelf ooit terug te geven. Gebruik dit als
+    bank_list_aspsps een 'Could not parse' fout geeft, om te zien of de sleutel
+    onderweg is afgekapt of beschadigd.
+
+    Returns:
+        JSON met lengtes en structurele checks, nooit de sleutelinhoud zelf.
+    """
+    b64_raw = ENABLE_BANKING_PRIVATE_KEY_B64 or ""
+    result = {
+        "b64_config_lengte": len(b64_raw),
+        "b64_bevat_witruimte_of_newline": any(c in b64_raw for c in (" ", "\n", "\r", "\t")),
+    }
+    try:
+        decoded = base64.b64decode(b64_raw)
+        result["gedecodeerde_lengte_bytes"] = len(decoded)
+        result["begint_met_begin_marker"] = decoded.strip().startswith(b"-----BEGIN")
+        result["eindigt_met_end_marker"] = decoded.strip().endswith(b"-----")
+        result["aantal_regels_in_pem"] = decoded.count(b"\n")
+    except Exception as e:
+        result["decodeer_fout"] = f"{type(e).__name__}: {e}"
+    return json.dumps(result, indent=2)
+
+
 async def handle_bank_callback(request: Request) -> HTMLResponse:
     """Publieke (niet-geauthenticeerde) route: ING/Enable Banking stuurt de
     gebruikers-browser hierheen terug na het inloggen bij de bank. Wisselt de
