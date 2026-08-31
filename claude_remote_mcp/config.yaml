@@ -6,7 +6,7 @@ description: >-
   Home Assistant automatiseringstools (via de HA Vibecode Agent) aan
   Claude beschikbaar stelt als remote connector - werkt vanuit web,
   mobiel en desktop, zonder dat er een computer aan hoeft te staan.
-url: "https://github.com/REPLACE_ME/claude-remote-mcp"
+url: "https://github.com/Jelle0721/claude-remote-mcp"
 arch:
   - aarch64
   - amd64
