@@ -19,7 +19,7 @@ from starlette.responses import JSONResponse
 
 from app.config import GATEWAY_TOKEN
 
-PUBLIC_PATHS = {"/health"}
+PUBLIC_PATHS = {"/health", "/bank/callback"}
 
 
 class BearerAuthMiddleware(BaseHTTPMiddleware):

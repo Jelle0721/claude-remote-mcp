@@ -20,6 +20,7 @@ from starlette.responses import JSONResponse
 from starlette.routing import Mount, Route
 
 from app.auth import BearerAuthMiddleware
+from app.bank_tools import bank_mcp, handle_bank_callback
 from app.config import GATEWAY_TOKEN, HA_AGENT_URL, LOG_LEVEL, PORT
 from app.garmin_tools import garmin_mcp
 from app.ha_tools import homeassistant_mcp
@@ -46,6 +47,7 @@ def build_app() -> Starlette:
     # hierboven is hier de primaire beveiligingslaag.
     garmin_app = garmin_mcp.streamable_http_app(streamable_http_path="/", host="0.0.0.0")
     ha_app = homeassistant_mcp.streamable_http_app(streamable_http_path="/", host="0.0.0.0")
+    bank_app = bank_mcp.streamable_http_app(streamable_http_path="/", host="0.0.0.0")
 
     @asynccontextmanager
     async def combined_lifespan(app):
@@ -54,14 +56,21 @@ def build_app() -> Starlette:
         async with AsyncExitStack() as stack:
             await stack.enter_async_context(garmin_app.router.lifespan_context(garmin_app))
             await stack.enter_async_context(ha_app.router.lifespan_context(ha_app))
+            await stack.enter_async_context(bank_app.router.lifespan_context(bank_app))
             logger.info("Claude Remote MCP Gateway gestart op poort %s", PORT)
             yield
 
     app = Starlette(
         routes=[
             Route("/health", health),
+            # Publieke callback: Enable Banking stuurt de gebruiker hier na
+            # het inloggen bij de bank naartoe. Bewust BUITEN de bearer-auth
+            # (die check draait op MCP-paden), want de browser van de
+            # gebruiker heeft ons gateway_token niet.
+            Route("/bank/callback", handle_bank_callback),
             Mount("/mcp/garmin", app=garmin_app),
             Mount("/mcp/homeassistant", app=ha_app),
+            Mount("/mcp/bank", app=bank_app),
         ],
         lifespan=combined_lifespan,
     )

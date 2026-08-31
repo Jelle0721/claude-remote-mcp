@@ -1,12 +1,12 @@
 name: Claude Remote MCP Gateway
-version: "1.0.1"
+version: "1.1.0"
 slug: claude_remote_mcp
 description: >-
   Permanente MCP-server (Streamable HTTP) die Garmin Connect-data en
   Home Assistant automatiseringstools (via de HA Vibecode Agent) aan
   Claude beschikbaar stelt als remote connector - werkt vanuit web,
   mobiel en desktop, zonder dat er een computer aan hoeft te staan.
-url: "https://github.com/Jelle0721/claude-remote-mcp"
+url: "https://github.com/REPLACE_ME/claude-remote-mcp"
 arch:
   - aarch64
   - amd64
@@ -25,6 +25,10 @@ options:
   garmin_password: ""
   ha_agent_url: "http://homeassistant.local:8099"
   ha_agent_key: ""
+  gateway_public_url: "https://mcp.jellevw.party"
+  enable_banking_app_id: ""
+  enable_banking_private_key_b64: ""
+  enable_banking_environment: "sandbox"
   log_level: "info"
 schema:
   gateway_token: password
@@ -32,4 +36,8 @@ schema:
   garmin_password: password?
   ha_agent_url: str
   ha_agent_key: password?
+  gateway_public_url: str
+  enable_banking_app_id: str?
+  enable_banking_private_key_b64: password?
+  enable_banking_environment: "list(sandbox|production)"
   log_level: "list(debug|info|warning|error)"

@@ -37,6 +37,30 @@ def _get(key: str, env_fallback: str, default: str | None = None) -> str | None:
 
 
 GATEWAY_TOKEN: str | None = _get("gateway_token", "GATEWAY_TOKEN")
+
+# Enable Banking (ING/PSD2) - private key komt base64-gecodeerd binnen omdat
+# de Home Assistant add-on-configuratie geen multi-line velden ondersteunt.
+ENABLE_BANKING_APP_ID: str | None = _get("enable_banking_app_id", "ENABLE_BANKING_APP_ID")
+ENABLE_BANKING_PRIVATE_KEY_B64: str | None = _get(
+    "enable_banking_private_key_b64", "ENABLE_BANKING_PRIVATE_KEY_B64"
+)
+ENABLE_BANKING_ENVIRONMENT: str = (
+    _get("enable_banking_environment", "ENABLE_BANKING_ENVIRONMENT", "sandbox") or "sandbox"
+)
+ENABLE_BANKING_API_BASE = "https://api.enablebanking.com"
+BANK_SESSION_FILE = str(DATA_DIR / "bank_session.json")
+BANK_PENDING_STATE_FILE = str(DATA_DIR / "bank_pending_state.json")
+
+# De publieke HTTPS-URL van deze gateway zelf (bv. https://mcp.jellevw.party),
+# nodig als redirect_url waar Enable Banking de gebruiker na inloggen bij ING
+# naar terugstuurt met een 'code'. Zonder https/publiek bereikbaar werkt de
+# terugkeer-stap niet.
+GATEWAY_PUBLIC_URL: str = (
+    _get("gateway_public_url", "GATEWAY_PUBLIC_URL", "") or ""
+).rstrip("/")
+# Afgeleide, exacte redirect-URL die je 1-op-1 moet overnemen bij de
+# 'Allowed Redirect URLs' registratie in het Enable Banking Control Panel.
+ENABLE_BANKING_REDIRECT_URL: str = f"{GATEWAY_PUBLIC_URL}/bank/callback" if GATEWAY_PUBLIC_URL else ""
 GARMIN_EMAIL: str | None = _get("garmin_email", "GARMIN_EMAIL")
 GARMIN_PASSWORD: str | None = _get("garmin_password", "GARMIN_PASSWORD")
 HA_AGENT_URL: str = _get("ha_agent_url", "HA_AGENT_URL", "http://homeassistant.local:8099") or (

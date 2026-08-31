@@ -112,7 +112,11 @@ async def ha_call_api(params: CallApiInput) -> str:
         return json.dumps({"error": f"Ongeldige HTTP-methode: {method}"})
 
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
+        # 120s i.p.v. 30s: sommige Agent-acties (bv. een dashboard toepassen)
+        # doen intern een git-commit + backup + configuratie-herlaad en duren
+        # structureel 40-45 seconden. Met 30s liep dat spuriieus op een timeout
+        # terwijl de actie server-side gewoon slaagde.
+        async with httpx.AsyncClient(timeout=120) as client:
             resp = await client.request(
                 method,
                 f"{HA_AGENT_URL}{params.path}",
