@@ -1,5 +1,5 @@
 name: Cloudflare Tunnel (Claude Gateway)
-version: "1.0.0"
+version: "1.1.0"
 slug: claude_cloudflare_tunnel
 description: >-
   Cloudflared-tunnel die de Claude Remote MCP Gateway (poort 8300) veilig
