@@ -232,3 +232,25 @@ async def garmin_get_body_battery(params: DateRangeInput) -> str:
         return json.dumps(data, indent=2, default=str)
     except Exception as e:
         return _error(e)
+
+
+@garmin_mcp.tool(
+    name="garmin_get_fitness_age",
+    annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=True),
+)
+async def garmin_get_fitness_age(params: DateInput) -> str:
+    """Haal de fitnessleeftijd van een datum op.
+
+    Args:
+        params: date in YYYY-MM-DD formaat
+
+    Returns:
+        JSON met fitnessleeftijd, echte leeftijd, haalbare fitnessleeftijd en de onderdelen
+        (VO2 max, rustpols, BMI/vetpercentage, intensieve minuten).
+    """
+    try:
+        client = _get_client()
+        data = client.get_fitnessage_data(params.date)
+        return json.dumps(data, indent=2, default=str)
+    except Exception as e:
+        return _error(e)
