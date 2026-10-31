@@ -128,6 +128,8 @@ class GarminAccount:
         with self.lock:
             client, self.wacht_op_code = self.wacht_op_code, None
             if client is None:
+                if self.client is not None:
+                    return  # al gekoppeld (bv. het formulier werd twee keer verstuurd)
                 raise RuntimeError("Er wacht geen login op een code. Vraag eerst een nieuwe code aan.")
             try:
                 client.resume_login(None, code.strip())
