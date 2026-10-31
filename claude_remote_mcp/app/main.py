@@ -5,6 +5,7 @@ MCP-servers bloot via Streamable HTTP:
 
   /mcp/garmin/          - Garmin Connect data
   /mcp/garmin-eline/    - Garmin Connect data van een tweede account (als ingesteld)
+  /login/<account>      - inlogpagina als Garmin om een beveiligingscode vraagt (garmin of garmin-eline)
   /mcp/homeassistant/   - Home Assistant automations etc. (via HA Vibecode Agent)
 
 Beveiligd met een gedeeld bearer-token (gateway_token add-on optie).
@@ -23,6 +24,7 @@ from starlette.routing import Mount, Route
 from app.auth import BearerAuthMiddleware
 from app.bank_tools import bank_mcp, handle_bank_callback
 from app.config import GATEWAY_TOKEN, HA_AGENT_URL, LOG_LEVEL, PORT
+from app.garmin_login import garmin_login
 from app.garmin_tools import garmin_eline_mcp, garmin_mcp
 from app.ha_tools import homeassistant_mcp
 
@@ -76,6 +78,8 @@ def build_app() -> Starlette:
             # (die check draait op MCP-paden), want de browser van de
             # gebruiker heeft ons gateway_token niet.
             Route("/bank/callback", handle_bank_callback),
+            # Inlogpagina voor de Garmin-code (achter het gateway_token, net als de MCP-paden).
+            Route("/login/{slug}", garmin_login, methods=["GET", "POST"]),
             Mount("/mcp/garmin", app=garmin_app),
             Mount("/mcp/homeassistant", app=ha_app),
             Mount("/mcp/bank", app=bank_app),

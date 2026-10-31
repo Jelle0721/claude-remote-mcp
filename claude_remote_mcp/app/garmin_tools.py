@@ -10,6 +10,11 @@ ingevuld, garmin_eline_mcp op /mcp/garmin-eline/.
 """
 
 import json
+import logging
+import math
+import threading
+import time
+from pathlib import Path
 from typing import Optional
 
 import garminconnect
@@ -18,6 +23,7 @@ from mcp_types import ToolAnnotations
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.config import (
+    GATEWAY_PUBLIC_URL,
     GARMIN_ELINE_EMAIL,
     GARMIN_ELINE_PASSWORD,
     GARMIN_ELINE_TOKEN_DIR,
@@ -26,33 +32,132 @@ from app.config import (
     GARMIN_TOKEN_DIR,
 )
 
+logger = logging.getLogger("claude_remote_mcp.garmin")
+
+
+# Na een mislukte login niet meteen opnieuw: elke poging kan Garmin een mail met een code laten sturen.
+WACHTTIJD_NA_FOUT = 30 * 60  # seconden
+
+
+class CodeNodig(RuntimeError):
+    """Garmin heeft een beveiligingscode gemaild; inloggen wacht tot die op de inlogpagina is ingevuld."""
+
+
+def masker(email: Optional[str]) -> str:
+    """e…@hotmail.nl: genoeg om te herkennen, zonder het hele adres te tonen."""
+    if not email or "@" not in email:
+        return "je e-mailadres"
+    naam, domein = email.split("@", 1)
+    return f"{naam[:1]}…@{domein}"
+
 
 class GarminAccount:
-    """Eén Garmin-account: inloggegevens, sessiemap en de (lazy) ingelogde client."""
+    """Eén Garmin-account: inloggegevens, sessiemap en de (lazy) ingelogde client.
 
-    def __init__(self, email: Optional[str], password: Optional[str], token_dir: str, optie: str):
+    Inloggen gaat in deze volgorde:
+    1. de bewaarde sessie uit token_dir (de normale situatie: geen mail, geen code);
+    2. e-mail + wachtwoord. Vraagt Garmin dan om een code (per mail), dan wacht dit account tot die code
+       op /login/<slug> is ingevuld en probeert het intussen NIET opnieuw: anders volgt er bij elke
+       aanroep een nieuwe mail. Mislukt inloggen om een andere reden, dan hooguit één poging per half uur.
+    """
+
+    def __init__(self, slug: str, email: Optional[str], password: Optional[str], token_dir: str, optie: str):
+        self.slug = slug  # deel van de adressen: /mcp/<slug>/ en /login/<slug>
         self.email = email
         self.password = password
         self.token_dir = token_dir
         self.optie = optie  # naam van de add-on opties, voor de foutmelding
         self.client: Optional[garminconnect.Garmin] = None
+        self.wacht_op_code: Optional[garminconnect.Garmin] = None  # login die op de mailcode wacht
+        self.laatste_fout: Optional[str] = None
+        self.laatste_poging = 0.0
+        self.lock = threading.Lock()  # de inlogpagina draait in een andere thread dan de tools
+
+    @property
+    def status(self) -> str:
+        if self.client is not None:
+            return "ingelogd"
+        if self.wacht_op_code is not None:
+            return "wacht_op_code"
+        return "uit"
+
+    def login_adres(self) -> str:
+        return f"{GATEWAY_PUBLIC_URL}/login/{self.slug}?token=<gateway_token>"
+
+    def code_uitleg(self) -> str:
+        return f"Garmin heeft een beveiligingscode gemaild naar {masker(self.email)}. Vul die in op {self.login_adres()}."
+
+    def _nieuw(self) -> garminconnect.Garmin:
+        return garminconnect.Garmin(email=self.email, password=self.password, return_on_mfa=True)
+
+    def _klaar(self, client: garminconnect.Garmin) -> None:
+        """Ingelogd: sessie op schijf bewaren, zodat een herstart geen nieuwe login (en code) nodig heeft."""
+        client.client.dump(self.token_dir)
+        self.client, self.laatste_fout = client, None
+
+    def inloggen(self) -> str:
+        """Eén inlogpoging. Geeft 'ingelogd' of 'wacht_op_code'; gooit een fout als het mislukt."""
+        with self.lock:
+            self.laatste_poging = time.time()
+            self.wacht_op_code = None
+            try:
+                if (Path(self.token_dir) / "garmin_tokens.json").exists():
+                    client = self._nieuw()
+                    try:
+                        client.login(tokenstore=self.token_dir)
+                        self.client, self.laatste_fout = client, None
+                        return "ingelogd"
+                    except Exception as e:  # sessie verlopen of geweigerd: opnieuw met het wachtwoord
+                        logger.warning("Bewaarde Garmin-sessie (%s) werkt niet meer: %s", self.slug, e)
+                client = self._nieuw()
+                status, _ = client.login()
+                if status == "needs_mfa":
+                    self.wacht_op_code = client
+                    logger.info("Garmin (%s) vraagt om een code; wacht op %s", self.slug, f"/login/{self.slug}")
+                    return "wacht_op_code"
+                # Ingelogd zonder code. In deze modus laadt de bibliotheek het profiel niet zelf.
+                client._load_profile_and_settings()
+                self._klaar(client)
+                return "ingelogd"
+            except Exception as e:
+                self.laatste_fout = f"{type(e).__name__}: {e}"
+                raise
+
+    def code_invullen(self, code: str) -> None:
+        """De code uit de mail van Garmin. Een code werkt één keer: mislukt het, vraag dan een nieuwe aan."""
+        with self.lock:
+            client, self.wacht_op_code = self.wacht_op_code, None
+            if client is None:
+                raise RuntimeError("Er wacht geen login op een code. Vraag eerst een nieuwe code aan.")
+            try:
+                client.resume_login(None, code.strip())
+                self._klaar(client)
+            except Exception as e:
+                self.laatste_fout = f"{type(e).__name__}: {e}"
+                raise
 
     def get_client(self) -> garminconnect.Garmin:
         """Geeft een ingelogde Garmin-client terug (lazy init, hergebruikt sessie)."""
         if self.client is not None:
             return self.client
-
-        client = garminconnect.Garmin(email=self.email, password=self.password)
+        if self.wacht_op_code is not None:
+            raise CodeNodig(self.code_uitleg())
+        nog = WACHTTIJD_NA_FOUT - (time.time() - self.laatste_poging)
+        if self.laatste_fout and nog > 0:
+            raise RuntimeError(
+                f"Inloggen bij Garmin lukte net niet ({self.laatste_fout}). Nieuwe poging over "
+                f"{math.ceil(nog / 60)} min, of nu via {self.login_adres()}."
+            )
         try:
-            client.login(tokenstore=self.token_dir)
+            status = self.inloggen()
         except garminconnect.GarminConnectAuthenticationError as e:
             raise RuntimeError(
                 f"Kon niet inloggen bij Garmin Connect. Controleer {self.optie}_email en "
                 f"{self.optie}_password in de add-on opties. "
                 f"Onderliggende fout: {e}"
             ) from e
-
-        self.client = client
+        if status == "wacht_op_code":
+            raise CodeNodig(self.code_uitleg())
         return self.client
 
 
@@ -333,12 +438,16 @@ def maak_garmin_mcp(naam: str, account: GarminAccount) -> MCPServer:
 
 
 # Jelle: /mcp/garmin/ (de bestaande connector). Eline: /mcp/garmin-eline/, alleen als ingevuld.
-garmin_mcp = maak_garmin_mcp("garmin_mcp", GarminAccount(GARMIN_EMAIL, GARMIN_PASSWORD, GARMIN_TOKEN_DIR, "garmin"))
-garmin_eline_mcp: Optional[MCPServer] = (
-    maak_garmin_mcp(
-        "garmin_eline_mcp",
-        GarminAccount(GARMIN_ELINE_EMAIL, GARMIN_ELINE_PASSWORD, GARMIN_ELINE_TOKEN_DIR, "garmin_eline"),
+# garmin_accounts (slug -> account) gebruikt de inlogpagina /login/<slug>.
+garmin_accounts: dict[str, GarminAccount] = {
+    "garmin": GarminAccount("garmin", GARMIN_EMAIL, GARMIN_PASSWORD, GARMIN_TOKEN_DIR, "garmin"),
+}
+if GARMIN_ELINE_EMAIL:
+    garmin_accounts["garmin-eline"] = GarminAccount(
+        "garmin-eline", GARMIN_ELINE_EMAIL, GARMIN_ELINE_PASSWORD, GARMIN_ELINE_TOKEN_DIR, "garmin_eline"
     )
-    if GARMIN_ELINE_EMAIL
-    else None
+
+garmin_mcp = maak_garmin_mcp("garmin_mcp", garmin_accounts["garmin"])
+garmin_eline_mcp: Optional[MCPServer] = (
+    maak_garmin_mcp("garmin_eline_mcp", garmin_accounts["garmin-eline"]) if "garmin-eline" in garmin_accounts else None
 )
