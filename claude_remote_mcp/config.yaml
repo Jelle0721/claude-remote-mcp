@@ -1,5 +1,5 @@
 name: Claude Remote MCP Gateway
-version: "1.2.0"
+version: "1.3.0"
 slug: claude_remote_mcp
 description: >-
   Permanente MCP-server (Streamable HTTP) die Garmin Connect-data en
@@ -23,6 +23,8 @@ options:
   gateway_token: ""
   garmin_email: ""
   garmin_password: ""
+  garmin_eline_email: ""
+  garmin_eline_password: ""
   ha_agent_url: "http://homeassistant.local:8099"
   ha_agent_key: ""
   gateway_public_url: "https://mcp.jellevw.party"
@@ -34,6 +36,8 @@ schema:
   gateway_token: password
   garmin_email: str?
   garmin_password: password?
+  garmin_eline_email: str?
+  garmin_eline_password: password?
   ha_agent_url: str
   ha_agent_key: password?
   gateway_public_url: str

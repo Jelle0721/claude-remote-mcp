@@ -4,6 +4,7 @@ Draait permanent op de Home Assistant Green als add-on en stelt twee
 MCP-servers bloot via Streamable HTTP:
 
   /mcp/garmin/          - Garmin Connect data
+  /mcp/garmin-eline/    - Garmin Connect data van een tweede account (als ingesteld)
   /mcp/homeassistant/   - Home Assistant automations etc. (via HA Vibecode Agent)
 
 Beveiligd met een gedeeld bearer-token (gateway_token add-on optie).
@@ -22,7 +23,7 @@ from starlette.routing import Mount, Route
 from app.auth import BearerAuthMiddleware
 from app.bank_tools import bank_mcp, handle_bank_callback
 from app.config import GATEWAY_TOKEN, HA_AGENT_URL, LOG_LEVEL, PORT
-from app.garmin_tools import garmin_mcp
+from app.garmin_tools import garmin_eline_mcp, garmin_mcp
 from app.ha_tools import homeassistant_mcp
 
 logging.basicConfig(level=LOG_LEVEL, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -48,6 +49,11 @@ def build_app() -> Starlette:
     garmin_app = garmin_mcp.streamable_http_app(streamable_http_path="/", host="0.0.0.0")
     ha_app = homeassistant_mcp.streamable_http_app(streamable_http_path="/", host="0.0.0.0")
     bank_app = bank_mcp.streamable_http_app(streamable_http_path="/", host="0.0.0.0")
+    garmin_eline_app = (
+        garmin_eline_mcp.streamable_http_app(streamable_http_path="/", host="0.0.0.0")
+        if garmin_eline_mcp
+        else None
+    )
 
     @asynccontextmanager
     async def combined_lifespan(app):
@@ -57,6 +63,8 @@ def build_app() -> Starlette:
             await stack.enter_async_context(garmin_app.router.lifespan_context(garmin_app))
             await stack.enter_async_context(ha_app.router.lifespan_context(ha_app))
             await stack.enter_async_context(bank_app.router.lifespan_context(bank_app))
+            if garmin_eline_app:
+                await stack.enter_async_context(garmin_eline_app.router.lifespan_context(garmin_eline_app))
             logger.info("Claude Remote MCP Gateway gestart op poort %s", PORT)
             yield
 
@@ -71,6 +79,7 @@ def build_app() -> Starlette:
             Mount("/mcp/garmin", app=garmin_app),
             Mount("/mcp/homeassistant", app=ha_app),
             Mount("/mcp/bank", app=bank_app),
+            *([Mount("/mcp/garmin-eline", app=garmin_eline_app)] if garmin_eline_app else []),
         ],
         lifespan=combined_lifespan,
     )

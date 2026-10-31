@@ -63,6 +63,9 @@ GATEWAY_PUBLIC_URL: str = (
 ENABLE_BANKING_REDIRECT_URL: str = f"{GATEWAY_PUBLIC_URL}/bank/callback" if GATEWAY_PUBLIC_URL else ""
 GARMIN_EMAIL: str | None = _get("garmin_email", "GARMIN_EMAIL")
 GARMIN_PASSWORD: str | None = _get("garmin_password", "GARMIN_PASSWORD")
+# Tweede Garmin-account (Eline), optioneel: alleen ingevuld komt /mcp/garmin-eline/ beschikbaar.
+GARMIN_ELINE_EMAIL: str | None = _get("garmin_eline_email", "GARMIN_ELINE_EMAIL")
+GARMIN_ELINE_PASSWORD: str | None = _get("garmin_eline_password", "GARMIN_ELINE_PASSWORD")
 HA_AGENT_URL: str = _get("ha_agent_url", "HA_AGENT_URL", "http://homeassistant.local:8099") or (
     "http://homeassistant.local:8099"
 )
@@ -73,3 +76,4 @@ PORT: int = int(_get("port", "PORT", "8300") or "8300")
 # Zorg dat de persistente datamap bestaat (voor Garmin sessie-tokens e.d.)
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 GARMIN_TOKEN_DIR = str(DATA_DIR / ".garminconnect")
+GARMIN_ELINE_TOKEN_DIR = str(DATA_DIR / ".garminconnect-eline")
